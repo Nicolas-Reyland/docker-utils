@@ -11,5 +11,7 @@ cd docker-utils
 ```
 You should have `$HOME/.local/bin` in your PATH as well as python3.10 installed.
 
+If you want to use your remote registry and push images to it, you should setup the `DOCKER_UTILS_REMOTE_REGISTRY` variable in your shell. Things will work fine without it tho.
+
 ## Usage
 Please refer to `docker-utils --help` for more information, but you are welcomed to add your own *modules* (take a look at the self-explanatory code).
