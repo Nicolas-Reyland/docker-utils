@@ -11,7 +11,7 @@ import re
 
 # Globals
 VERSION_TAG_REGEX_PATTERN = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
-DOCKER_COMMANDS_LIST = list()
+DOCKER_UTILS_MODULES = list()
 
 
 # Argument parsing
@@ -85,6 +85,7 @@ imgf_parser.add_argument(
 imgf_parser.add_argument(
     "-a",
     "--all",
+    dest="imgf_all",
     action="store_true",
     help="Also list image layers",
 )
@@ -137,7 +138,7 @@ imgf_parser.add_argument(
     help="Remove all images which are tagged with a different patch version than the latest one (Basically removes all non-magic images)",
 )
 imgf_parser.add_argument(
-    "-l",
+    "-k",
     "--keep-last",
     type=int,
     default=0,
@@ -149,6 +150,13 @@ imgf_parser.add_argument(
     type=int,
     default=0,
     help="Remove the n oldest images. Keep the rest (based on creation date). A value of zero means no removal",
+)
+imgf_parser.add_argument(
+    "-a",
+    "--all",
+    dest="rmoi_all",
+    action="store_true",
+    help="Remove all the images (except latest of course). Incopatible with any other image-filtering option",
 )
 imgf_parser.add_argument(
     "-f",
@@ -190,12 +198,12 @@ def print_error(*args, exit_program: bool = True, exit_code: int = 1, **kwargs):
 
 
 def register_command(command_name: str):
-    global DOCKER_COMMANDS_LIST
+    global DOCKER_UTILS_MODULES
 
     def class_wrapper(command_class):
         assert issubclass(command_class, DockerCommandBase)
         instance = command_class(command_name)
-        DOCKER_COMMANDS_LIST.append(instance)
+        DOCKER_UTILS_MODULES.append(instance)
 
     return class_wrapper
 
@@ -413,7 +421,7 @@ class DockerImgf(DockerCommandBase):
         # find the images
         f_kwargs = {
             "name": args.name if args.exact_name else None,
-            "all": args.all,
+            "all": args.imgf_all,
             "filters": {
                 "dangling": args.dangling,
             },
@@ -475,17 +483,21 @@ class DockerRemoveOldImages(DockerCommandBase):
                 "Command 'rmoi' has no development mode. Aborting", exit_program=True
             )
         if args.keep_last != 0:
-            assert args.rm_old == 0, "Cannot use -l/--keep-last option with -o/--rm-old"
+            assert args.rm_old == 0, "Cannot use -k/--keep-last option with -o/--rm-old"
             assert (
                 not args.rm_major and not args.rm_minor and not args.rm_patch
-            ), "Cannot use -l/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+            ), "Cannot use -o/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
         if args.rm_old != 0:
             assert (
                 args.keep_last == 0
-            ), "Cannot use -o/--rm-old option with -l/--keep-last"
+            ), "Cannot use -o/--rm-old option with -k/--keep-last"
             assert (
                 not args.rm_major and not args.rm_minor and not args.rm_patch
-            ), "Cannot use -l/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+            ), "Cannot use -o/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+        any_filtering = args.rm_old or args.keep_last or args.rm_major or args.rm_minor or args.rm_patch
+        assert (
+            any_filtering or args.rmoi_all
+        ), "Must at least specify one filtering option, or use -a/--all"
         # Gather images
         images = client.images.list(name=args.image_name)
         for image in images:
@@ -522,11 +534,12 @@ class DockerRemoveOldImages(DockerCommandBase):
             )
         # Keep last n images
         if args.keep_last != 0:
-            images = images[args.keep_last :]
+            images = images[args.keep_last - 1 :]
         # Remove olest n images
         if args.rm_old != 0:
             images = images[-args.rm_old :]
 
+        # Lastly, remove the selected images
         for image in images:
             short_id = extract_short_id(image.short_id)
             print(f"Removing {image_str(image)} with short id {short_id}")
@@ -537,19 +550,33 @@ class DockerRemoveOldImages(DockerCommandBase):
                     noprune=args.no_prune,
                 )
         if args.dry_run:
-            print("Dry-run finished")
+            print("Dry-run finished successfully")
 
 
 # Main function
 def main(client):
-    global DOCKER_COMMANDS_LIST
+    global DOCKER_UTILS_MODULES
+
     args = parser.parse_args()
-    for command in DOCKER_COMMANDS_LIST:
-        if command.name == args.command:
-            command.execute(client, args)
-            exit(0)
+    # No command given or Command not implemented
+    if args.command is None:
+        print_error("Subcommand needed. Maybe try the --help option ?", exit_program=False)
+        return 1
+    # Look for matching subcommand
+    for module in DOCKER_UTILS_MODULES:
+        if module.name == args.command:
+            try:
+                module.execute(client, args)
+                return 0
+            except AssertionError as exception:
+                print_error(exception, exit_program=False)
+                return 1
+    # Missing implementation for subcommand
+    print_error(f"Missing module for subcommand '{args.command}'", exit_program=False)
+    return 1
 
 
 if __name__ == "__main__":
     client = docker.from_env()
-    main(client)
+    exit_code = main(client)
+    sys.exit(exit_code)
