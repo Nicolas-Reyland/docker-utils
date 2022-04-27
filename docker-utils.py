@@ -7,6 +7,7 @@ import sys
 import json
 import docker
 import humanize
+import datetime
 import re
 
 # Globals
@@ -470,6 +471,7 @@ class DockerImgf(DockerCommandBase):
         self.repo_width = 60
         self.tag_width = 20
         self.short_id_width = 17
+        self.created_width = 25
         self.size_width = 10
 
     def execute(self, client, args: list[str]) -> None:
@@ -490,8 +492,11 @@ class DockerImgf(DockerCommandBase):
         self._print_fixed_width("REPOSITORY", self.repo_width)
         self._print_fixed_width("TAG", self.tag_width)
         self._print_fixed_width("IMAGE ID", self.short_id_width)
+        self._print_fixed_width("CREATED", self.created_width)
         self._print_fixed_width("SIZE", self.size_width)
         print()
+        # sort images by creation date
+        images = sorted(images, key=lambda image: image.attrs["Created"], reverse=True)
         for image in images:
             self._print_image(image, unique=args.unique)
             if args.space:
@@ -509,9 +514,14 @@ class DockerImgf(DockerCommandBase):
             if i == 0:
                 short_id = extract_short_id(image.short_id)
                 size = humanize.naturalsize(image.attrs["Size"])
+                created_isoformat = image.attrs["Created"]
+                created_datetime = datetime.datetime.fromisoformat(created_isoformat[:26])
+                now_datetime = datetime.datetime.now()
+                created = humanize.naturaltime(now_datetime - created_datetime)
             else:
-                short_id = size = ""
+                short_id = size = created = ""
             self._print_fixed_width(short_id, self.short_id_width)
+            self._print_fixed_width(created, self.created_width)
             self._print_fixed_width(size, self.size_width)
             print()
 
