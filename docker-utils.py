@@ -9,6 +9,7 @@ import re
 
 # Globals
 VERSION_TAG_REGEX_PATTERN = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+DOCKER_COMMANDS_LIST = list()
 
 
 # Argument parsing
@@ -104,6 +105,14 @@ imgf_parser.add_argument(
 
 
 # Utils
+def register_command(command_name: str):
+    global DOCKER_COMMANDS_LIST
+    def class_wrapper(command_class):
+        assert issubclass(command_class, DockerCommandBase)
+        instance = command_class(command_name)
+        DOCKER_COMMANDS_LIST.append(instance)
+    return class_wrapper
+
 def extract_tag_from_full(full_tag: str) -> str:
     *_, tag = full_tag.rpartition(":")
     return tag
@@ -142,6 +151,8 @@ class DockerCommandBase(ABC):
     def execute(self, args: list[str]) -> None:
         """Execute the arguments"""
 
+
+@register_command("build")
 class DockerBuild(DockerCommandBase):
     def __init__(self, name: str):
         super().__init__(name)
@@ -214,6 +225,7 @@ class DockerBuild(DockerCommandBase):
                 print(f"AUX: {json.dumps(data, indent=4)}")
 
 
+@register_command("imgf")
 class DockerImgf(DockerCommandBase):
     def __init__(self, name: str):
         super().__init__(name)
@@ -271,11 +283,9 @@ class DockerImgf(DockerCommandBase):
 
 
 def main(client):
-    commands: list[DockerCommandBase] = list()
-    commands.append(DockerBuild("build"))
-    commands.append(DockerImgf("imgf"))
+    global DOCKER_COMMANDS_LIST
     args = parser.parse_args()
-    for command in commands:
+    for command in DOCKER_COMMANDS_LIST:
         if command.name == args.command:
             command.execute(client, args)
 
