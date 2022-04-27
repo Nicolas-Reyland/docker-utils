@@ -433,6 +433,7 @@ def main(client):
     for command in DOCKER_COMMANDS_LIST:
         if command.name == args.command:
             command.execute(client, args)
+            exit(0)
 
 if __name__ == "__main__":
     client = docker.from_env()
