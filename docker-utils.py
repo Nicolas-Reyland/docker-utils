@@ -112,36 +112,36 @@ imgf_parser.add_argument(
 )
 
 # Rmoi parser
-rmoi_parser = sub_parsers.add_parser(
-    "rmoi",
-    description="Remove old images",
-    help="Remove old images. This will never delete the latest version of an image",
+frmi_parser = sub_parsers.add_parser(
+    "frmi",
+    description="Filter and remove images",
+    help="Filter and remove images. This will never delete the latest version of an image",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "image_name",
     metavar="image-name",
     help="Name of the image repository (exact match)",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "-M",
     "--rm-major",
     action="store_true",
     help="Remove all images which are tagged with a different major version than the latest one",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "-m",
     "--rm-minor",
     action="store_true",
     help="Remove all images which are tagged with a different minor version than the latest one",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "-p",
     "--rm-patch",
     action="store_true",
     help="Remove all images which are tagged with a different patch version than the latest one "
     "(Basically removes all non-magic images)",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "-k",
     "--keep-last",
     type=int,
@@ -149,7 +149,7 @@ rmoi_parser.add_argument(
     help="Keep the last n images. Remove all the rest (based on creation date). "
     "A value of zero means no removal",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "-o",
     "--rm-old",
     type=int,
@@ -157,27 +157,27 @@ rmoi_parser.add_argument(
     help="Remove the n oldest images. Keep the rest (based on creation date). "
     "A value of zero means no removal",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "-a",
     "--all",
-    dest="rmoi_all",
+    dest="frmi_all",
     action="store_true",
     help="Remove all the images (except latest of course). "
     "Incopatible with any other image-filtering option",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "-f",
     "--force",
-    dest="rmoi_force",
+    dest="frmi_force",
     action="store_true",
     help="Force removal of the images",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "--no-prune",
     action="store_true",
     help="Do not delete untagged parents",
 )
-rmoi_parser.add_argument(
+frmi_parser.add_argument(
     "--dry-run",
     action="store_true",
     help="Print the images that would be removed, without actually removing those",
@@ -522,8 +522,8 @@ class DockerImgf(DockerCommandBase):
         print(string, end="", **kwargs)
 
 
-@register_command("rmoi")
-class DockerRemoveOldImages(DockerCommandBase):
+@register_command("frmi")
+class DockerFilterRemoveImages(DockerCommandBase):
     def __init__(self, name: str):
         super().__init__(name)
 
@@ -531,11 +531,11 @@ class DockerRemoveOldImages(DockerCommandBase):
         """Will only execute on images that are named after tag convention"""
         # Dry run announcment
         if args.dry_run:
-            print("Dry run for rmoi")
+            print("Dry run for frmi")
         # Check for options compatibility
         if args.dev:
             print_error(
-                "Command 'rmoi' has no development mode. Aborting", exit_program=True
+                "Command 'frmi' has no development mode. Aborting", exit_program=True
             )
         if args.keep_last != 0:
             assert args.rm_old == 0, "Cannot use -k/--keep-last option with -o/--rm-old"
@@ -557,7 +557,7 @@ class DockerRemoveOldImages(DockerCommandBase):
             or args.rm_patch
         )
         assert (
-            any_filtering or args.rmoi_all
+            any_filtering or args.frmi_all
         ), "Must at least specify one filtering option, or use -a/--all"
         # Gather images
         images = client.images.list(name=args.image_name)
@@ -614,7 +614,7 @@ class DockerRemoveOldImages(DockerCommandBase):
             if not args.dry_run:
                 client.images.remove(
                     image=short_id,
-                    force=args.rmoi_force,
+                    force=args.frmi_force,
                     noprune=args.no_prune,
                 )
         if args.dry_run:
