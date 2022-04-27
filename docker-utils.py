@@ -12,6 +12,7 @@ import re
 # Globals
 VERSION_TAG_REGEX_PATTERN = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 DOCKER_UTILS_MODULES = list()
+DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME = "DOCKER_UTILS_REMOTE_REGISTRY"
 
 
 # Argument parsing
@@ -390,6 +391,8 @@ class DockerBuild(DockerCommandBase):
                                 exit_program=True,
                             )
                 print(f"Image tag {latest_image_tag} -> {new_image_tag}")
+
+        # Build image
         full_new_image_name = f"{args.image_name}:{new_image_tag}"
         print(f"Final image name: {full_new_image_name}")
 
@@ -403,9 +406,30 @@ class DockerBuild(DockerCommandBase):
         for line in low_level_client.build(**kwargs):
             data = json.loads(line)
             if "stream" in data:
-                print(f"BUILD: {data['stream']}", end="")
+                print(f"BUILD: {data['stream']}", end="" if data["stream"].endswith("\n") else "\n")
             if "aux" in data:
                 print(f"AUX: {json.dumps(data, indent=4)}")
+        # Tag image
+        try:
+            new_image = client.images.get(full_new_image_name)
+        except docker.errors.ImageNotFound:
+            print_error("Build does not seem to have finished successfully. New image could not be found", exit_program=True)
+        # Tag as new image
+        new_image.tag(
+            repository=args.image_name,
+            tag="latest",
+        )
+        if remote_registry := os.environ.get(DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME):
+            new_image.tag(
+                repository=remote_registry + args.image_name,
+                tag="latest",
+            )
+            new_image.tag(
+                repository=remote_registry + args.image_name,
+                tag=new_image_tag,
+            )
+        else:
+            print_warning(f"No remote registry setup. To register a registry, please set the '{DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME}'")
 
 
 @register_command("imgf")
