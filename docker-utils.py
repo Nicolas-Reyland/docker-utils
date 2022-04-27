@@ -175,7 +175,7 @@ def print_warning(*args, **kwargs):
     }
     print(*args, **kwargs)
 
-def print_error(*args, exit_program: bool=False, exit_code: int=1, **kwargs):
+def print_error(*args, exit_program: bool=True, exit_code: int=1, **kwargs):
     print("Error: ", file=sys.stderr, end="")
     kwargs |= {
         "file": sys.stderr,
@@ -308,7 +308,7 @@ class DockerBuild(DockerCommandBase):
                 try:
                     latest_image_tag = next(filter(lambda tag: tag not in self.magic_tags, all_tags))
                 except StopIteration:
-                    raise ValueError(f"This image has no non-magic tag. Magic tags: {', '.join(self.magic_tags)}")  
+                    print_error(f"This image has no non-magic tag. Magic tags: {', '.join(self.magic_tags)}", exit_program=True)
                 # Updating tag
                 if args.tag:
                     new_image_tag = args.tag
@@ -323,7 +323,7 @@ class DockerBuild(DockerCommandBase):
                         case "patch":
                             new_image_tag = upgrade_tag_patch(latest_image_tag)
                         case _:
-                            raise RuntimeError(f"Should never reach this point. Unkown upgrade policy: {args.upgrade}")
+                            print_error(f"Should never reach this point. Unkown upgrade policy: {args.upgrade}", exit_program=True)
                 print(f"Image tag {latest_image_tag} -> {new_image_tag}")
         full_new_image_name = f"{args.image_name}:{new_image_tag}"
         print(f"Final image name: {full_new_image_name}")
