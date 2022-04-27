@@ -317,7 +317,7 @@ class DockerCommandBase(ABC):
 class DockerBuild(DockerCommandBase):
     def __init__(self, name: str):
         super().__init__(name)
-        self.default_image_tag = "v1.0.0"
+        self.default_image_tag = "v0.1.0"
         self.default_upgrade_rule = "patch"
         self.default_push_rule = "local"
         self.magic_tags = ["latest", "dev"]
