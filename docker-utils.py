@@ -15,7 +15,9 @@ DOCKER_COMMANDS_LIST = list()
 
 
 # Argument parsing
-parser = ArgumentParser(description="Docker-Utils, a tool for fast container and image management")
+parser = ArgumentParser(
+    description="Docker-Utils, a tool for fast container and image management"
+)
 parser.add_argument(
     "--dev",
     action="store_true",
@@ -175,7 +177,8 @@ def print_warning(*args, **kwargs):
     }
     print(*args, **kwargs)
 
-def print_error(*args, exit_program: bool=True, exit_code: int=1, **kwargs):
+
+def print_error(*args, exit_program: bool = True, exit_code: int = 1, **kwargs):
     print("Error: ", file=sys.stderr, end="")
     kwargs |= {
         "file": sys.stderr,
@@ -185,61 +188,82 @@ def print_error(*args, exit_program: bool=True, exit_code: int=1, **kwargs):
     if exit_program:
         sys.exit(exit_code)
 
+
 def register_command(command_name: str):
     global DOCKER_COMMANDS_LIST
+
     def class_wrapper(command_class):
         assert issubclass(command_class, DockerCommandBase)
         instance = command_class(command_name)
         DOCKER_COMMANDS_LIST.append(instance)
+
     return class_wrapper
+
 
 def extract_tag_from_full(full_tag: str) -> str:
     *_, tag = full_tag.rpartition(":")
     return tag
 
+
 def extract_repo_from_full(full_tag: str) -> str:
     repo, *_ = full_tag.rpartition(":")
     return repo
+
 
 def extract_repo_and_tag_from_full(full_tag: str) -> str:
     repo, _, tag = full_tag.rpartition(":")
     return repo, tag
 
+
 def extract_short_id(full_short_id: str) -> str:
     *_, short_id = full_short_id.partition(":")
     return short_id
 
+
 def extract_valid_tag(image_short_tags: list[str]) -> str:
-    valid_tags = set(filter(
-        VERSION_TAG_REGEX_PATTERN.match,
-        image_short_tags,
-    ))
+    valid_tags = set(
+        filter(
+            VERSION_TAG_REGEX_PATTERN.match,
+            image_short_tags,
+        )
+    )
     assert len(valid_tags) == 1, f"Image has multiple versions: {', '.join(valid_tags)}"
     return valid_tags.pop()
 
+
 def extract_version_from_image_short_tags(image_short_tags: list[str]) -> tuple[int]:
     tag = extract_valid_tag(image_short_tags)
-    tag = tag[1:] # remove 'v'
+    tag = tag[1:]  # remove 'v'
     tag_atoms = tag.split(".")
     return tuple(map(int, tag_atoms))
 
+
 def upgrade_tag_major(tag: str) -> str:
     assert VERSION_TAG_REGEX_PATTERN.match(tag)
-    tag = tag[1:] # remove 'v'
+    tag = tag[1:]  # remove 'v'
     major, *_ = tag.partition(".")
     return f"v{int(major) + 1}.0.0"
+
 
 def upgrade_tag_minor(tag: str) -> str:
     assert VERSION_TAG_REGEX_PATTERN.match(tag)
     vmajor, minor, patch = tag.split(".")
     return f"{vmajor}.{int(minor) + 1}.0"
 
+
 def upgrade_tag_patch(tag: str) -> str:
     assert VERSION_TAG_REGEX_PATTERN.match(tag)
     rest, _, patch = tag.rpartition(".")
     return f"{rest}.{int(patch) + 1}"
 
-def image_in_version_scope(latest_version: tuple[int], short_tags: list[str], rm_major: bool, rm_minor: bool, rm_patch: bool) -> bool:
+
+def image_in_version_scope(
+    latest_version: tuple[int],
+    short_tags: list[str],
+    rm_major: bool,
+    rm_minor: bool,
+    rm_patch: bool,
+) -> bool:
     version = extract_version_from_image_short_tags(short_tags)
     if rm_patch:
         return version != latest_version
@@ -249,10 +273,15 @@ def image_in_version_scope(latest_version: tuple[int], short_tags: list[str], rm
         return version[0] != latest_version[0]
     return False
 
+
 def image_str(image) -> str:
     short_tags = set(map(extract_tag_from_full, image.tags))
     # basically take the shortest repo name and remove the tag from it
-    repo = extract_repo_from_full(sorted(image.tags, key=lambda full_tag: len(extract_repo_from_full(full_tag)))[0])
+    repo = extract_repo_from_full(
+        sorted(image.tags, key=lambda full_tag: len(extract_repo_from_full(full_tag)))[
+            0
+        ]
+    )
     tag = extract_valid_tag(short_tags)
     short_tags.remove(tag)
     return f"Image {repo}:{tag}{(' (' + ', '.join(short_tags) + ')') if short_tags else ''}"
@@ -278,13 +307,14 @@ class DockerBuild(DockerCommandBase):
         self.magic_tags = ["latest", "dev"]
 
     def execute(self, client, args: list[str]) -> None:
-        """Disclaimer : I use a 'vMAJOR.MINOR.PATCH' tagging convention for my docker images
-        """
+        """Disclaimer : I use a 'vMAJOR.MINOR.PATCH' tagging convention for my docker images"""
         # docker-utils dev build image-name major|minor|patch|none push|push-tag-only|local|
         low_level_client = docker.APIClient()
         if args.dev:
             if args.upgrade != "none":
-                print_warning(f"upgrade policy is '{args.upgrade}', but will be ignored due to development mode")
+                print_warning(
+                    f"upgrade policy is '{args.upgrade}', but will be ignored due to development mode"
+                )
             if args.tag:
                 new_image_tag = args.tag
                 print_warning("setting tag manually when in development mode")
@@ -292,23 +322,47 @@ class DockerBuild(DockerCommandBase):
                 new_image_tag = "dev"
                 print("Development mode: tag is set to 'dev'")
         else:
-            old_images = client.images.list(name = args.image_name)
+            old_images = client.images.list(name=args.image_name)
             image_tag = self.default_image_tag if not args.tag else args.tag
             if not old_images:
-                print(f"No image found with this name. Starting with new tag {image_tag}")
-                assert args.upgrade == "none", f"Cannot upgrade the version number when no other image with this name exists. Must use 'none' in this case."
+                print(
+                    f"No image found with this name. Starting with new tag {image_tag}"
+                )
+                assert (
+                    args.upgrade == "none"
+                ), f"Cannot upgrade the version number when no other image with this name exists. Must use 'none' in this case."
             else:
                 try:
-                    latest_image = next(filter(lambda image: any(tag.endswith("latest") for tag in image.tags), old_images))
+                    latest_image = next(
+                        filter(
+                            lambda image: any(
+                                tag.endswith("latest") for tag in image.tags
+                            ),
+                            old_images,
+                        )
+                    )
                 except StopIteration:
-                    print("No image with tag 'latest'. Using the most recent one instead.")
-                    latest_image = sorted(old_images, key=lambda image: image.attrs["Created"], reverse=True)[0]
+                    print(
+                        "No image with tag 'latest'. Using the most recent one instead."
+                    )
+                    latest_image = sorted(
+                        old_images,
+                        key=lambda image: image.attrs["Created"],
+                        reverse=True,
+                    )[0]
                 all_tags = set(map(extract_tag_from_full, latest_image.tags))
-                print(f"Detected latest version of {args.image_name} as having the tag{'s' if len(latest_image.tags) > 1 else ''} {', '.join(all_tags)}")
+                print(
+                    f"Detected latest version of {args.image_name} as having the tag{'s' if len(latest_image.tags) > 1 else ''} {', '.join(all_tags)}"
+                )
                 try:
-                    latest_image_tag = next(filter(lambda tag: tag not in self.magic_tags, all_tags))
+                    latest_image_tag = next(
+                        filter(lambda tag: tag not in self.magic_tags, all_tags)
+                    )
                 except StopIteration:
-                    print_error(f"This image has no non-magic tag. Magic tags: {', '.join(self.magic_tags)}", exit_program=True)
+                    print_error(
+                        f"This image has no non-magic tag. Magic tags: {', '.join(self.magic_tags)}",
+                        exit_program=True,
+                    )
                 # Updating tag
                 if args.tag:
                     new_image_tag = args.tag
@@ -323,7 +377,10 @@ class DockerBuild(DockerCommandBase):
                         case "patch":
                             new_image_tag = upgrade_tag_patch(latest_image_tag)
                         case _:
-                            print_error(f"Should never reach this point. Unkown upgrade policy: {args.upgrade}", exit_program=True)
+                            print_error(
+                                f"Should never reach this point. Unkown upgrade policy: {args.upgrade}",
+                                exit_program=True,
+                            )
                 print(f"Image tag {latest_image_tag} -> {new_image_tag}")
         full_new_image_name = f"{args.image_name}:{new_image_tag}"
         print(f"Final image name: {full_new_image_name}")
@@ -359,11 +416,13 @@ class DockerImgf(DockerCommandBase):
             "all": args.all,
             "filters": {
                 "dangling": args.dangling,
-            }
+            },
         }
         images = client.images.list(**f_kwargs)
         if not args.exact_name:
-            images = filter(lambda image: any(args.name in tag for tag in image.tags), images)
+            images = filter(
+                lambda image: any(args.name in tag for tag in image.tags), images
+            )
         # print the images
         self._print_fixed_width("REPOSITORY", self.repo_width)
         self._print_fixed_width("TAG", self.tag_width)
@@ -380,7 +439,7 @@ class DockerImgf(DockerCommandBase):
             tags = [sorted(image.tags, key=lambda tag: len(tag))[0]]
         else:
             tags = image.tags
-        for i,full_tag in enumerate(tags):
+        for i, full_tag in enumerate(tags):
             repo, tag = extract_repo_and_tag_from_full(full_tag)
             self._print_fixed_width(repo, self.repo_width)
             self._print_fixed_width(tag, self.tag_width)
@@ -393,7 +452,7 @@ class DockerImgf(DockerCommandBase):
             self._print_fixed_width(size, self.size_width)
             print()
 
-    def _print_fixed_width(self, content, width, char = " ", **kwargs):
+    def _print_fixed_width(self, content, width, char=" ", **kwargs):
         content_width = len(content)
         num_spaces = max(width - content_width, 0)
         string = content + char * num_spaces
@@ -406,24 +465,27 @@ class DockerRemoveOldImages(DockerCommandBase):
         super().__init__(name)
 
     def execute(self, client, args: list[str]) -> None:
-        """Will only execute on images that are named after tag convention
-        """
+        """Will only execute on images that are named after tag convention"""
         # Dry run announcment
         if args.dry_run:
             print("Dry run for rmoi")
         # Check for options compatibility
         if args.dev:
-            print_error("Command 'rmoi' has no development mode. Aborting", exit_program=True)
+            print_error(
+                "Command 'rmoi' has no development mode. Aborting", exit_program=True
+            )
         if args.keep_last != 0:
-            assert args.rm_old == 0, \
-                "Cannot use -l/--keep-last option with -o/--rm-old"
-            assert not args.rm_major and not args.rm_minor and not args.rm_patch, \
-                "Cannot use -l/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+            assert args.rm_old == 0, "Cannot use -l/--keep-last option with -o/--rm-old"
+            assert (
+                not args.rm_major and not args.rm_minor and not args.rm_patch
+            ), "Cannot use -l/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
         if args.rm_old != 0:
-            assert args.keep_last == 0, \
-                "Cannot use -o/--rm-old option with -l/--keep-last"
-            assert not args.rm_major and not args.rm_minor and not args.rm_patch, \
-                "Cannot use -l/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+            assert (
+                args.keep_last == 0
+            ), "Cannot use -o/--rm-old option with -l/--keep-last"
+            assert (
+                not args.rm_major and not args.rm_minor and not args.rm_patch
+            ), "Cannot use -l/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
         # Gather images
         images = client.images.list(name=args.image_name)
         for image in images:
@@ -431,36 +493,39 @@ class DockerRemoveOldImages(DockerCommandBase):
         # remove all images that don't respect tagging convention from list (and dev-only if in it)
         images = filter(
             lambda image: any(
-                VERSION_TAG_REGEX_PATTERN.match(tag)
-                for tag in image.short_tags
-                ),
-            images)
+                VERSION_TAG_REGEX_PATTERN.match(tag) for tag in image.short_tags
+            ),
+            images,
+        )
         # sort by creation date. latest is first. oldest is last
         images = sorted(images, key=lambda image: image.attrs["Created"], reverse=True)
         latest_image = images.pop(0)
-        assert any(tag == "latest" for tag in latest_image.short_tags), \
-            f"Latest image (by creation date) is not tagged 'latest': {', '.join(latest_image.short_tags)}"
+        assert any(
+            tag == "latest" for tag in latest_image.short_tags
+        ), f"Latest image (by creation date) is not tagged 'latest': {', '.join(latest_image.short_tags)}"
         print(f"Safeguarding latest image: {image_str(latest_image)}")
         # Filter out of the list 'images' the ones that should be kept
         latest_version = extract_version_from_image_short_tags(latest_image.short_tags)
         # Version-based filtering
         if args.rm_patch or args.rm_minor or args.rm_major:
-            images = list(filter(
-                lambda image: image_in_version_scope(
-                    latest_version,
-                    image.short_tags,
-                    args.rm_major,
-                    args.rm_minor,
-                    args.rm_patch
-                ),
-                images,
-            ))
+            images = list(
+                filter(
+                    lambda image: image_in_version_scope(
+                        latest_version,
+                        image.short_tags,
+                        args.rm_major,
+                        args.rm_minor,
+                        args.rm_patch,
+                    ),
+                    images,
+                )
+            )
         # Keep last n images
         if args.keep_last != 0:
-            images = images[args.keep_last:]
+            images = images[args.keep_last :]
         # Remove olest n images
         if args.rm_old != 0:
-            images = images[-args.rm_old:]
+            images = images[-args.rm_old :]
 
         for image in images:
             short_id = extract_short_id(image.short_id)
@@ -483,6 +548,7 @@ def main(client):
         if command.name == args.command:
             command.execute(client, args)
             exit(0)
+
 
 if __name__ == "__main__":
     client = docker.from_env()
