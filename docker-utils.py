@@ -113,7 +113,7 @@ def extract_repo_from_full(full_tag: str) -> str:
     return repo
 
 def extract_repo_and_tag_from_full(full_tag: str) -> str:
-    repo, _, tag = tag.rpartition(":")
+    repo, _, tag = full_tag.rpartition(":")
     return repo, tag
 
 def upgrade_tag_major(tag: str) -> str:
