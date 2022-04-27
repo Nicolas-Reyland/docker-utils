@@ -1,4 +1,5 @@
 #!/usr/bin/env python3.10
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from argparse import ArgumentParser
 import os
@@ -103,6 +104,62 @@ imgf_parser.add_argument(
     help="Print an empty line between new image ids",
 )
 
+# Rmoi parser
+imgf_parser = sub_parsers.add_parser(
+    "rmoi",
+    description="Remove old images",
+    help="Remove old images. This will never delete the latest version of an image",
+)
+imgf_parser.add_argument(
+    "image_name",
+    metavar="image-name",
+    help="Name of the image repository (exact match)",
+)
+imgf_parser.add_argument(
+    "-M",
+    "--rm-major",
+    action="store_true",
+    help="Remove all images which are tagged with a different major version than the latest one",
+)
+imgf_parser.add_argument(
+    "-m",
+    "--rm-minor",
+    action="store_true",
+    help="Remove all images which are tagged with a different minor version than the latest one",
+)
+imgf_parser.add_argument(
+    "-p",
+    "--rm-patch",
+    action="store_true",
+    help="Remove all images which are tagged with a different patch version than the latest one (Basically removes all non-magic images)",
+)
+imgf_parser.add_argument(
+    "-l",
+    "--rm-last",
+    type=int,
+    default=0,
+    help="Keep the last n images. Remove all the rest (based on creation date). A value of zero means no removal",
+)
+imgf_parser.add_argument(
+    "-o",
+    "--rm-old",
+    type=int,
+    default=0,
+    help="Remove the n oldest images. Keep the rest (based on creation date). A value of zero means no removal",
+)
+imgf_parser.add_argument(
+    "-f",
+    "--force",
+    dest="rmoi_force",
+    action="store_true",
+    help="Force removal of the images",
+)
+imgf_parser.add_argument(
+    "--no-prune",
+    action="store_true",
+    help="Do not delete untagged parents",
+)
+
 
 # Utils
 def register_command(command_name: str):
@@ -125,6 +182,24 @@ def extract_repo_and_tag_from_full(full_tag: str) -> str:
     repo, _, tag = full_tag.rpartition(":")
     return repo, tag
 
+def extract_short_id(full_short_id: str) -> str:
+    *_, short_id = full_short_id.partition(":")
+    return short_id
+
+def extract_valid_tag(image_short_tags: list[str]) -> str:
+    valid_tags = set(filter(
+        VERSION_TAG_REGEX_PATTERN.match,
+        image_short_tags,
+    ))
+    assert len(valid_tags) == 1, f"Image has multiple versions: {', '.join(valid_tags)}"
+    return valid_tags.pop()
+
+def extract_version_from_image_short_tags(image_short_tags: list[str]) -> tuple[int]:
+    tag = extract_valid_tag(image_short_tags)
+    tag = tag[1:] # remove 'v'
+    tag_atoms = tag.split(".")
+    return tuple(map(int, tag_atoms))
+
 def upgrade_tag_major(tag: str) -> str:
     assert VERSION_TAG_REGEX_PATTERN.match(tag)
     tag = tag[1:] # remove 'v'
@@ -141,14 +216,31 @@ def upgrade_tag_patch(tag: str) -> str:
     rest, _, patch = tag.rpartition(".")
     return f"{rest}.{int(patch) + 1}"
 
+def image_in_version_scope(latest_version: tuple[int], short_tags: list[str], rm_major: bool, rm_minor: bool, rm_patch: bool) -> bool:
+    version = extract_version_from_image_short_tags(short_tags)
+    if rm_patch:
+        return version != latest_version
+    if rm_minor:
+        return version[1] != latest_version[1] or version[0] != latest_version[0]
+    if rm_major:
+        return version[0] != latest_version[0]
+    return False
+
+def image_str(image) -> str:
+    short_tags = set(map(extract_tag_from_full, image.tags))
+    # basically take the shortest repo name and remove the tag from it
+    repo = extract_repo_from_full(sorted(image.tags, key=lambda full_tag: len(extract_repo_from_full(full_tag)))[0])
+    tag = extract_valid_tag(short_tags)
+    short_tags.remove(tag)
+    return f"Image {repo}:{tag}{(' (' + ', '.join(short_tags) + ')') if short_tags else ''}"
 
 # Commands
 class DockerCommandBase(ABC):
     def __init__(self, name: str):
         self.name = name
-    
+
     @abstractmethod
-    def execute(self, args: list[str]) -> None:
+    def execute(self, client, args: list[str]) -> None:
         """Execute the arguments"""
 
 
@@ -161,7 +253,9 @@ class DockerBuild(DockerCommandBase):
         self.default_push_rule = "local"
         self.magic_tags = ["latest", "dev"]
 
-    def execute(self, client, args):
+    def execute(self, client, args: list[str]) -> None:
+        """Disclaimer : I use a 'vMAJOR.MINOR.PATCH' tagging convention for my docker images
+        """
         # docker-utils dev build image-name major|minor|patch|none push|push-tag-only|local|
         low_level_client = docker.APIClient()
         if args.dev:
@@ -234,7 +328,7 @@ class DockerImgf(DockerCommandBase):
         self.short_id_width = 20
         self.size_width = 10
 
-    def execute(self, client, args):
+    def execute(self, client, args: list[str]) -> None:
         # find the images
         f_kwargs = {
             "name": args.name if args.exact_name else None,
@@ -267,7 +361,7 @@ class DockerImgf(DockerCommandBase):
             self._print_fixed_width(repo, self.repo_width)
             self._print_fixed_width(tag, self.tag_width)
             if i == 0:
-                *_, short_id = image.short_id.partition(":")
+                short_id = extract_short_id(image.short_id)
                 size = humanize.naturalsize(image.attrs["Size"])
             else:
                 short_id = size = ""
@@ -280,6 +374,57 @@ class DockerImgf(DockerCommandBase):
         num_spaces = max(width - content_width, 0)
         string = content + char * num_spaces
         print(string, end="", **kwargs)
+
+
+@register_command("rmoi")
+class DockerRemoveOldImages(DockerCommandBase):
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def execute(self, client, args: list[str]) -> None:
+        """Will only execute on images that are named after tag convention
+        """
+        images = client.images.list(name=args.image_name)
+        for image in images:
+            image.short_tags = list(map(extract_tag_from_full, image.tags))
+        # remove all images that don't respect tagging convention from list (and dev-only if in it)
+        images = filter(
+            lambda image: any(
+                VERSION_TAG_REGEX_PATTERN.match(tag)
+                for tag in image.short_tags
+                ),
+            images)
+        # sort by creation date. latest is first. oldest is last
+        images = sorted(images, key=lambda image: image.attrs["Created"], reverse=True)
+        latest_image = images.pop(0)
+        assert any(tag == "latest" for tag in latest_image.short_tags), \
+            f"Latest image (by creation date) is not tagged 'latest': {', '.join(latest_image.short_tags)}"
+        print(f"Safeguarding latest image: {latest_image}")
+        # Filter out of the list 'images' the ones that should be kept
+        latest_version = extract_version_from_image_short_tags(latest_image.short_tags)
+        # Version-based filtering
+        if args.rm_patch or args.rm_minor or args.rm_major:
+            images = list(filter(
+                lambda image: image_in_version_scope(
+                    latest_version,
+                    image.short_tags,
+                    args.rm_major,
+                    args.rm_minor,
+                    args.rm_patch
+                ),
+                images,
+            ))
+        if args.rm_last or args.rm_old:
+            raise NotImplementedError("Options -o and -l are not yet implemented")
+
+        for image in images:
+            short_id = extract_short_id(image.short_id)
+            print(f"Removing {image_str(image)} with short id {short_id}")
+            client.images.remove(
+                image=short_id,
+                force=args.rmoi_force,
+                noprune=args.no_prune,
+            )
 
 
 def main(client):
