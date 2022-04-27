@@ -75,7 +75,9 @@ imgf_parser = sub_parsers.add_parser(
 )
 imgf_parser.add_argument(
     "name",
-    help="Name or part of name of image",
+    nargs="?",
+    default=None,
+    help="Name of image. Can be partial or absent. If absent, all images are listed",
 )
 imgf_parser.add_argument(
     "-e",
@@ -110,72 +112,72 @@ imgf_parser.add_argument(
 )
 
 # Rmoi parser
-imgf_parser = sub_parsers.add_parser(
+rmoi_parser = sub_parsers.add_parser(
     "rmoi",
     description="Remove old images",
     help="Remove old images. This will never delete the latest version of an image",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "image_name",
     metavar="image-name",
     help="Name of the image repository (exact match)",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "-M",
     "--rm-major",
     action="store_true",
     help="Remove all images which are tagged with a different major version than the latest one",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "-m",
     "--rm-minor",
     action="store_true",
     help="Remove all images which are tagged with a different minor version than the latest one",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "-p",
     "--rm-patch",
     action="store_true",
-    help="Remove all images which are tagged with a different patch version than the latest one " \
-         "(Basically removes all non-magic images)",
+    help="Remove all images which are tagged with a different patch version than the latest one "
+    "(Basically removes all non-magic images)",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "-k",
     "--keep-last",
     type=int,
     default=0,
-    help="Keep the last n images. Remove all the rest (based on creation date). " \
-         "A value of zero means no removal",
+    help="Keep the last n images. Remove all the rest (based on creation date). "
+    "A value of zero means no removal",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "-o",
     "--rm-old",
     type=int,
     default=0,
-    help="Remove the n oldest images. Keep the rest (based on creation date). " \
-         "A value of zero means no removal",
+    help="Remove the n oldest images. Keep the rest (based on creation date). "
+    "A value of zero means no removal",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "-a",
     "--all",
     dest="rmoi_all",
     action="store_true",
-    help="Remove all the images (except latest of course). " \
-         "Incopatible with any other image-filtering option",
+    help="Remove all the images (except latest of course). "
+    "Incopatible with any other image-filtering option",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "-f",
     "--force",
     dest="rmoi_force",
     action="store_true",
     help="Force removal of the images",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "--no-prune",
     action="store_true",
     help="Do not delete untagged parents",
 )
-imgf_parser.add_argument(
+rmoi_parser.add_argument(
     "--dry-run",
     action="store_true",
     help="Print the images that would be removed, without actually removing those",
@@ -341,10 +343,10 @@ class DockerBuild(DockerCommandBase):
                 print(
                     f"No image found with this name. Starting with new tag {image_tag}"
                 )
-                assert (
-                    args.upgrade == "none"
-                ), f"Cannot upgrade the version number when no other image with this name exists. " \
+                assert args.upgrade == "none", (
+                    f"Cannot upgrade the version number when no other image with this name exists. "
                     "Must use 'none' in this case."
+                )
             else:
                 try:
                     latest_image = next(
@@ -366,8 +368,8 @@ class DockerBuild(DockerCommandBase):
                     )[0]
                 all_tags = set(map(extract_tag_from_full, latest_image.tags))
                 print(
-                    f"Detected latest version of {args.image_name} as having the " \
-                     f"tag{'s' if len(latest_image.tags) > 1 else ''} {', '.join(all_tags)}"
+                    f"Detected latest version of {args.image_name} as having the "
+                    f"tag{'s' if len(latest_image.tags) > 1 else ''} {', '.join(all_tags)}"
                 )
                 try:
                     latest_image_tag = next(
@@ -456,8 +458,8 @@ class DockerBuild(DockerCommandBase):
             print()
         else:
             print_warning(
-                f"No remote registry setup. To setup a registry to push to, " \
-                 "please set the '{DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME}' variable in your shell"
+                f"No remote registry setup. To setup a registry to push to, "
+                "please set the '{DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME}' variable in your shell"
             )
 
 
@@ -465,9 +467,9 @@ class DockerBuild(DockerCommandBase):
 class DockerImgf(DockerCommandBase):
     def __init__(self, name: str):
         super().__init__(name)
-        self.repo_width = 56
-        self.tag_width = 15
-        self.short_id_width = 20
+        self.repo_width = 60
+        self.tag_width = 20
+        self.short_id_width = 17
         self.size_width = 10
 
     def execute(self, client, args: list[str]) -> None:
@@ -480,7 +482,7 @@ class DockerImgf(DockerCommandBase):
             },
         }
         images = client.images.list(**f_kwargs)
-        if not args.exact_name:
+        if args.name and not args.exact_name:
             images = filter(
                 lambda image: any(args.name in tag for tag in image.tags), images
             )
@@ -571,10 +573,10 @@ class DockerRemoveOldImages(DockerCommandBase):
             )
         )
         num_images = len(images)
-        assert (
-            num_images > 1
-        ),  f"There {'is only' if num_images == 1 else 'are'} {num_images} " \
+        assert num_images > 1, (
+            f"There {'is only' if num_images == 1 else 'are'} {num_images} "
             f"image{'s' if num_images == 0 else ''} with the name '{args.image_name}'"
+        )
         # sort by creation date. latest is first. oldest is last
         images = sorted(images, key=lambda image: image.attrs["Created"], reverse=True)
         latest_image = images.pop(0)
