@@ -4,11 +4,11 @@ from abc import ABC, abstractmethod
 from argparse import ArgumentParser
 import os
 import sys
+import re
 import json
 import docker
 import humanize
 import datetime
-import re
 
 # Globals
 VERSION_TAG_REGEX_PATTERN = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
@@ -292,7 +292,7 @@ def image_in_version_scope(
 
 def image_str(image) -> str:
     short_tags = set(map(extract_tag_from_full, image.tags))
-    # basically take the shortest repo name and remove the tag from it
+    # Basically take the shortest repo name and remove the tag from it
     repo = extract_repo_from_full(
         sorted(image.tags, key=lambda full_tag: len(extract_repo_from_full(full_tag)))[
             0
@@ -324,7 +324,7 @@ class DockerBuild(DockerCommandBase):
 
     def execute(self, client, args: list[str]) -> None:
         """Disclaimer : I use a 'vMAJOR.MINOR.PATCH' tagging convention for my docker images"""
-        # docker-utils dev build image-name major|minor|patch|none push|push-tag-only|local|
+        # docker-utils --dev build image-name major|minor|patch|none push|push-tag-only|local|
         low_level_client = docker.APIClient()
         if args.dev:
             if args.upgrade != "none":
@@ -475,7 +475,7 @@ class DockerImgf(DockerCommandBase):
         self.size_width = 10
 
     def execute(self, client, args: list[str]) -> None:
-        # find the images
+        # Find the images
         f_kwargs = {
             "name": args.name if args.exact_name else None,
             "all": args.imgf_all,
@@ -488,14 +488,14 @@ class DockerImgf(DockerCommandBase):
             images = filter(
                 lambda image: any(args.name in tag for tag in image.tags), images
             )
-        # print the images
+        # Print the images
         self._print_fixed_width("REPOSITORY", self.repo_width)
         self._print_fixed_width("TAG", self.tag_width)
         self._print_fixed_width("IMAGE ID", self.short_id_width)
         self._print_fixed_width("CREATED", self.created_width)
         self._print_fixed_width("SIZE", self.size_width)
         print()
-        # sort images by creation date
+        # Sort images by creation date
         images = sorted(images, key=lambda image: image.attrs["Created"], reverse=True)
         for image in images:
             self._print_image(image, unique=args.unique)
@@ -575,7 +575,7 @@ class DockerFilterRemoveImages(DockerCommandBase):
         images = client.images.list(name=args.image_name)
         for image in images:
             image.short_tags = list(map(extract_tag_from_full, image.tags))
-        # remove all images that don't respect tagging convention from list (and dev-only if in it)
+        # Remove all images that don't respect tagging convention from list (and dev-only if in it)
         images = list(
             filter(
                 lambda image: any(
@@ -589,7 +589,7 @@ class DockerFilterRemoveImages(DockerCommandBase):
             f"There {'is only' if num_images == 1 else 'are'} {num_images} "
             f"image{'s' if num_images == 0 else ''} with the name '{args.image_name}'"
         )
-        # sort by creation date. latest is first. oldest is last
+        # Sort by creation date. latest is first. oldest is last
         images = sorted(images, key=lambda image: image.attrs["Created"], reverse=True)
         latest_image = images.pop(0)
         assert any(
@@ -634,15 +634,17 @@ class DockerFilterRemoveImages(DockerCommandBase):
 
 
 # Main function
-def main(client):
+def main():
     global DOCKER_UTILS_MODULES
 
+    # Docker client
+    client = docker.from_env()
+    # Parse arguments to program
     args = parser.parse_args()
     # No command given or Command not implemented
     if args.command is None:
-        print_error(
-            "Subcommand needed. Maybe try the --help option ?", exit_program=False
-        )
+        print_error("Missing subcommand", exit_program=False)
+        parser.print_help()
         return 1
     # Look for matching subcommand
     for module in DOCKER_UTILS_MODULES:
@@ -659,6 +661,4 @@ def main(client):
 
 
 if __name__ == "__main__":
-    client = docker.from_env()
-    exit_code = main(client)
-    sys.exit(exit_code)
+    sys.exit(main())
