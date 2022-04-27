@@ -234,6 +234,7 @@ def image_str(image) -> str:
     short_tags.remove(tag)
     return f"Image {repo}:{tag}{(' (' + ', '.join(short_tags) + ')') if short_tags else ''}"
 
+
 # Commands
 class DockerCommandBase(ABC):
     def __init__(self, name: str):
@@ -427,6 +428,7 @@ class DockerRemoveOldImages(DockerCommandBase):
             )
 
 
+# Main function
 def main(client):
     global DOCKER_COMMANDS_LIST
     args = parser.parse_args()
