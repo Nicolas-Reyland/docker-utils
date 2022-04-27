@@ -494,7 +494,13 @@ class DockerRemoveOldImages(DockerCommandBase):
             assert (
                 not args.rm_major and not args.rm_minor and not args.rm_patch
             ), "Cannot use -o/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
-        any_filtering = args.rm_old or args.keep_last or args.rm_major or args.rm_minor or args.rm_patch
+        any_filtering = (
+            args.rm_old
+            or args.keep_last
+            or args.rm_major
+            or args.rm_minor
+            or args.rm_patch
+        )
         assert (
             any_filtering or args.rmoi_all
         ), "Must at least specify one filtering option, or use -a/--all"
@@ -503,12 +509,18 @@ class DockerRemoveOldImages(DockerCommandBase):
         for image in images:
             image.short_tags = list(map(extract_tag_from_full, image.tags))
         # remove all images that don't respect tagging convention from list (and dev-only if in it)
-        images = filter(
-            lambda image: any(
-                VERSION_TAG_REGEX_PATTERN.match(tag) for tag in image.short_tags
-            ),
-            images,
+        images = list(
+            filter(
+                lambda image: any(
+                    VERSION_TAG_REGEX_PATTERN.match(tag) for tag in image.short_tags
+                ),
+                images,
+            )
         )
+        num_images = len(images)
+        assert (
+            num_images > 1
+        ), f"There {'is only' if num_images == 1 else 'are'} {num_images} image{'s' if num_images == 0 else ''} with the name '{args.image_name}'"
         # sort by creation date. latest is first. oldest is last
         images = sorted(images, key=lambda image: image.attrs["Created"], reverse=True)
         latest_image = images.pop(0)
@@ -560,7 +572,9 @@ def main(client):
     args = parser.parse_args()
     # No command given or Command not implemented
     if args.command is None:
-        print_error("Subcommand needed. Maybe try the --help option ?", exit_program=False)
+        print_error(
+            "Subcommand needed. Maybe try the --help option ?", exit_program=False
+        )
         return 1
     # Look for matching subcommand
     for module in DOCKER_UTILS_MODULES:
