@@ -516,7 +516,7 @@ class DockerImgf(DockerCommandBase):
                 size = humanize.naturalsize(image.attrs["Size"])
                 created_isoformat = image.attrs["Created"]
                 created_datetime = datetime.datetime.fromisoformat(
-                    created_isoformat.removesuffix("Z")[:26]
+                    created_isoformat[:26]
                 )
                 now_datetime = datetime.datetime.now()
                 created = humanize.naturaltime(now_datetime - created_datetime)
