@@ -136,28 +136,32 @@ imgf_parser.add_argument(
     "-p",
     "--rm-patch",
     action="store_true",
-    help="Remove all images which are tagged with a different patch version than the latest one (Basically removes all non-magic images)",
+    help="Remove all images which are tagged with a different patch version than the latest one " \
+         "(Basically removes all non-magic images)",
 )
 imgf_parser.add_argument(
     "-k",
     "--keep-last",
     type=int,
     default=0,
-    help="Keep the last n images. Remove all the rest (based on creation date). A value of zero means no removal",
+    help="Keep the last n images. Remove all the rest (based on creation date). " \
+         "A value of zero means no removal",
 )
 imgf_parser.add_argument(
     "-o",
     "--rm-old",
     type=int,
     default=0,
-    help="Remove the n oldest images. Keep the rest (based on creation date). A value of zero means no removal",
+    help="Remove the n oldest images. Keep the rest (based on creation date). " \
+         "A value of zero means no removal",
 )
 imgf_parser.add_argument(
     "-a",
     "--all",
     dest="rmoi_all",
     action="store_true",
-    help="Remove all the images (except latest of course). Incopatible with any other image-filtering option",
+    help="Remove all the images (except latest of course). " \
+         "Incopatible with any other image-filtering option",
 )
 imgf_parser.add_argument(
     "-f",
@@ -339,7 +343,8 @@ class DockerBuild(DockerCommandBase):
                 )
                 assert (
                     args.upgrade == "none"
-                ), f"Cannot upgrade the version number when no other image with this name exists. Must use 'none' in this case."
+                ), f"Cannot upgrade the version number when no other image with this name exists. " \
+                    "Must use 'none' in this case."
             else:
                 try:
                     latest_image = next(
@@ -361,7 +366,8 @@ class DockerBuild(DockerCommandBase):
                     )[0]
                 all_tags = set(map(extract_tag_from_full, latest_image.tags))
                 print(
-                    f"Detected latest version of {args.image_name} as having the tag{'s' if len(latest_image.tags) > 1 else ''} {', '.join(all_tags)}"
+                    f"Detected latest version of {args.image_name} as having the " \
+                     f"tag{'s' if len(latest_image.tags) > 1 else ''} {', '.join(all_tags)}"
                 )
                 try:
                     latest_image_tag = next(
@@ -450,7 +456,8 @@ class DockerBuild(DockerCommandBase):
             print()
         else:
             print_warning(
-                f"No remote registry setup. To setup a registry to push to, please set the '{DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME}' variable in zour shell"
+                f"No remote registry setup. To setup a registry to push to, " \
+                 "please set the '{DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME}' variable in your shell"
             )
 
 
@@ -532,14 +539,14 @@ class DockerRemoveOldImages(DockerCommandBase):
             assert args.rm_old == 0, "Cannot use -k/--keep-last option with -o/--rm-old"
             assert (
                 not args.rm_major and not args.rm_minor and not args.rm_patch
-            ), "Cannot use -o/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+            ), "Cannot use -o/--rm-old option with any version-based filtering option"
         if args.rm_old != 0:
             assert (
                 args.keep_last == 0
             ), "Cannot use -o/--rm-old option with -k/--keep-last"
             assert (
                 not args.rm_major and not args.rm_minor and not args.rm_patch
-            ), "Cannot use -o/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+            ), "Cannot use -o/--rm-old option with any version-based filtering option"
         any_filtering = (
             args.rm_old
             or args.keep_last
@@ -566,7 +573,8 @@ class DockerRemoveOldImages(DockerCommandBase):
         num_images = len(images)
         assert (
             num_images > 1
-        ), f"There {'is only' if num_images == 1 else 'are'} {num_images} image{'s' if num_images == 0 else ''} with the name '{args.image_name}'"
+        ),  f"There {'is only' if num_images == 1 else 'are'} {num_images} " \
+            f"image{'s' if num_images == 0 else ''} with the name '{args.image_name}'"
         # sort by creation date. latest is first. oldest is last
         images = sorted(images, key=lambda image: image.attrs["Created"], reverse=True)
         latest_image = images.pop(0)
