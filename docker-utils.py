@@ -406,30 +406,52 @@ class DockerBuild(DockerCommandBase):
         for line in low_level_client.build(**kwargs):
             data = json.loads(line)
             if "stream" in data:
-                print(f"BUILD: {data['stream']}", end="" if data["stream"].endswith("\n") else "\n")
+                print(
+                    f"BUILD: {data['stream']}",
+                    end="" if data["stream"].endswith("\n") else "\n",
+                )
             if "aux" in data:
                 print(f"AUX: {json.dumps(data, indent=4)}")
         # Tag image
         try:
             new_image = client.images.get(full_new_image_name)
         except docker.errors.ImageNotFound:
-            print_error("Build does not seem to have finished successfully. New image could not be found", exit_program=True)
+            print_error(
+                "Build does not seem to have finished successfully. New image could not be found",
+                exit_program=True,
+            )
         # Tag as new image
         new_image.tag(
             repository=args.image_name,
             tag="latest",
         )
         if remote_registry := os.environ.get(DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME):
-            new_image.tag(
-                repository=remote_registry + args.image_name,
+            remote_registry_image_name = remote_registry + args.image_name
+            assert new_image.tag(
+                repository=remote_registry_image_name,
                 tag="latest",
-            )
-            new_image.tag(
-                repository=remote_registry + args.image_name,
+            ), f"Tag failed for {remote_registry_image_name}:latest"
+            assert new_image.tag(
+                repository=remote_registry_image_name,
                 tag=new_image_tag,
-            )
+            ), f"Tag failed for {remote_registry_image_name}:{new_image_tag}"
+            # Push the images
+            for data in client.images.push(
+                repository=remote_registry_image_name,
+                tag="latest",
+            ):
+                print(data, end="", flush=True)
+            print()
+            for data in client.images.push(
+                repository=remote_registry_image_name,
+                tag=new_image_tag,
+            ):
+                print(data, end="", flush=True)
+            print()
         else:
-            print_warning(f"No remote registry setup. To register a registry, please set the '{DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME}'")
+            print_warning(
+                f"No remote registry setup. To setup a registry to push to, please set the '{DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME}' variable in zour shell"
+            )
 
 
 @register_command("imgf")
