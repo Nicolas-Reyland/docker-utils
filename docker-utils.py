@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from argparse import ArgumentParser
 import os
+import sys
 import json
 import docker
 import humanize
@@ -135,7 +136,7 @@ imgf_parser.add_argument(
 )
 imgf_parser.add_argument(
     "-l",
-    "--rm-last",
+    "--keep-last",
     type=int,
     default=0,
     help="Keep the last n images. Remove all the rest (based on creation date). A value of zero means no removal",
@@ -159,9 +160,31 @@ imgf_parser.add_argument(
     action="store_true",
     help="Do not delete untagged parents",
 )
+imgf_parser.add_argument(
+    "--dry-run",
+    action="store_true",
+    help="Print the images that would be removed, without actually removing those",
+)
 
 
 # Utils
+def print_warning(*args, **kwargs):
+    print("Warning: ", end="")
+    kwargs |= {
+        "flush": True,
+    }
+    print(*args, **kwargs)
+
+def print_error(*args, exit_program: bool=False, exit_code: int=1, **kwargs):
+    print("Error: ", file=sys.stderr, end="")
+    kwargs |= {
+        "file": sys.stderr,
+        "flush": True,
+    }
+    print(*args, **kwargs)
+    if exit_program:
+        sys.exit(exit_code)
+
 def register_command(command_name: str):
     global DOCKER_COMMANDS_LIST
     def class_wrapper(command_class):
@@ -261,10 +284,10 @@ class DockerBuild(DockerCommandBase):
         low_level_client = docker.APIClient()
         if args.dev:
             if args.upgrade != "none":
-                print(f"Warning: upgrade policy is '{args.upgrade}', but will be ignored due to development mode")
+                print_warning(f"upgrade policy is '{args.upgrade}', but will be ignored due to development mode")
             if args.tag:
                 new_image_tag = args.tag
-                print("Warning: setting tag manually when in development mode")
+                print_warning("setting tag manually when in development mode")
             else:
                 new_image_tag = "dev"
                 print("Development mode: tag is set to 'dev'")
@@ -385,6 +408,23 @@ class DockerRemoveOldImages(DockerCommandBase):
     def execute(self, client, args: list[str]) -> None:
         """Will only execute on images that are named after tag convention
         """
+        # Dry run announcment
+        if args.dry_run:
+            print("Dry run for rmoi")
+        # Check for options compatibility
+        if args.dev:
+            print_error("Command 'rmoi' has no development mode. Aborting", exit_program=True)
+        if args.keep_last != 0:
+            assert args.rm_old == 0, \
+                "Cannot use -l/--keep-last option with -o/--rm-old"
+            assert not args.rm_major and not args.rm_minor and not args.rm_patch, \
+                "Cannot use -l/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+        if args.rm_old != 0:
+            assert args.keep_last == 0, \
+                "Cannot use -o/--rm-old option with -l/--keep-last"
+            assert not args.rm_major and not args.rm_minor and not args.rm_patch, \
+                "Cannot use -l/--rm-old option with any version-filtering option -M/--rm-major/-m/--rm-minor/-p/--rm-patch"
+        # Gather images
         images = client.images.list(name=args.image_name)
         for image in images:
             image.short_tags = list(map(extract_tag_from_full, image.tags))
@@ -400,7 +440,7 @@ class DockerRemoveOldImages(DockerCommandBase):
         latest_image = images.pop(0)
         assert any(tag == "latest" for tag in latest_image.short_tags), \
             f"Latest image (by creation date) is not tagged 'latest': {', '.join(latest_image.short_tags)}"
-        print(f"Safeguarding latest image: {latest_image}")
+        print(f"Safeguarding latest image: {image_str(latest_image)}")
         # Filter out of the list 'images' the ones that should be kept
         latest_version = extract_version_from_image_short_tags(latest_image.short_tags)
         # Version-based filtering
@@ -415,17 +455,24 @@ class DockerRemoveOldImages(DockerCommandBase):
                 ),
                 images,
             ))
-        if args.rm_last or args.rm_old:
-            raise NotImplementedError("Options -o and -l are not yet implemented")
+        # Keep last n images
+        if args.keep_last != 0:
+            images = images[args.keep_last:]
+        # Remove olest n images
+        if args.rm_old != 0:
+            images = images[-args.rm_old:]
 
         for image in images:
             short_id = extract_short_id(image.short_id)
             print(f"Removing {image_str(image)} with short id {short_id}")
-            client.images.remove(
-                image=short_id,
-                force=args.rmoi_force,
-                noprune=args.no_prune,
-            )
+            if not args.dry_run:
+                client.images.remove(
+                    image=short_id,
+                    force=args.rmoi_force,
+                    noprune=args.no_prune,
+                )
+        if args.dry_run:
+            print("Dry-run finished")
 
 
 # Main function
