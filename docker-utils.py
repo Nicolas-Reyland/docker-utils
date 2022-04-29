@@ -637,8 +637,6 @@ class DockerFilterRemoveImages(DockerCommandBase):
 def main():
     global DOCKER_UTILS_MODULES
 
-    # Docker client
-    client = docker.from_env()
     # Parse arguments to program
     args = parser.parse_args()
     # No command given or Command not implemented
@@ -646,6 +644,8 @@ def main():
         print_error("Missing subcommand", exit_program=False)
         parser.print_help()
         return 1
+    # Docker client
+    client = docker.from_env()
     # Look for matching subcommand
     for module in DOCKER_UTILS_MODULES:
         if module.name == args.command:
