@@ -409,6 +409,7 @@ class DockerBuild(DockerCommandBase):
             "path": os.getcwd(),
             "tag": full_new_image_name,
             "network_mode": "host",
+            "rm": True,
         }
         # Merge with custom build args
         kwargs |= json.loads(args.build_args)
@@ -436,27 +437,31 @@ class DockerBuild(DockerCommandBase):
         )
         if remote_registry := os.environ.get(DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME):
             remote_registry_image_name = remote_registry + args.image_name
-            assert new_image.tag(
-                repository=remote_registry_image_name,
-                tag="latest",
-            ), f"Tag failed for {remote_registry_image_name}:latest"
+            if not args.dev:
+                assert new_image.tag(
+                    repository=remote_registry_image_name,
+                    tag="latest",
+                ), f"Tag failed for {remote_registry_image_name}:latest"
             assert new_image.tag(
                 repository=remote_registry_image_name,
                 tag=new_image_tag,
             ), f"Tag failed for {remote_registry_image_name}:{new_image_tag}"
             # Push the images
-            for data in client.images.push(
-                repository=remote_registry_image_name,
-                tag="latest",
-            ):
-                print(data, end="", flush=True)
-            print()
-            for data in client.images.push(
-                repository=remote_registry_image_name,
-                tag=new_image_tag,
-            ):
-                print(data, end="", flush=True)
-            print()
+            if not args.dev:
+                for data in client.images.push(
+                    repository=remote_registry_image_name,
+                    tag="latest",
+                ):
+                    print(data, end="", flush=True)
+                print()
+                for data in client.images.push(
+                    repository=remote_registry_image_name,
+                    tag=new_image_tag,
+                ):
+                    print(data, end="", flush=True)
+                print()
+            else:
+                print("Skipping pushing because of development mode")
         else:
             print_warning(
                 f"No remote registry setup. To setup a registry to push to, "
