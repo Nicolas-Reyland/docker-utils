@@ -341,8 +341,9 @@ class DockerBuild(DockerCommandBase):
             old_images = client.images.list(name=args.image_name)
             image_tag = self.default_image_tag if not args.tag else args.tag
             if not old_images:
+                new_image_tag = self.default_image_tag
                 print(
-                    f"No image found with this name. Starting with new tag {image_tag}"
+                    f"No image found with this name. Starting with new tag {new_image_tag}"
                 )
                 assert args.upgrade == "none", (
                     f"Cannot upgrade the version number when no other image with this name exists. "
