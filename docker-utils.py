@@ -649,12 +649,11 @@ def main():
         print_error("Missing subcommand", exit_program=False)
         parser.print_help()
         return 1
-    # Docker client
-    client = docker.from_env()
     # Look for matching subcommand
     for module in DOCKER_UTILS_MODULES:
         if module.name == args.command:
             try:
+                client = docker.from_env()
                 module.execute(client, args)
                 return 0
             except AssertionError as exception:
