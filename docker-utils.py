@@ -354,32 +354,50 @@ class DockerBuild(DockerCommandBase):
                     latest_image = next(
                         filter(
                             lambda image: any(
-                                tag.endswith("latest") for tag in image.tags
+                                tag.rpartition(":")[2] == "latest" for tag in image.tags
                             ),
                             old_images,
                         )
                     )
+                    all_tags = set(map(extract_tag_from_full, latest_image.tags))
+                    all_tags = list(filter(VERSION_TAG_REGEX_PATTERN.match, all_tags))
+                    num_all_tags = len(all_tags)
+                    match num_all_tags:
+                        case 0:
+                            print_error(f"Image tagged as 'latest' has no valid alternative version {latest_image.tags}", exit_program=True)
+                        case 1:
+                            latest_image_tag = all_tags[0]
+                        case _:
+                            print_error(f"Image tagged as 'latest' multiple different valid version tags: {latest_image.tags}", exit_program=True)
                 except StopIteration:
-                    print(
+                    print_warning(
                         "No image with tag 'latest'. Using the most recent one instead."
                     )
-                    latest_image = sorted(
+                    latest_images = sorted(
                         old_images,
                         key=lambda image: image.attrs["Created"],
                         reverse=True,
-                    )[0]
-                all_tags = set(map(extract_tag_from_full, latest_image.tags))
+                    )
+                    for latest_image in latest_images:
+                        all_tags = set(map(extract_tag_from_full, latest_image.tags))
+                        all_tags = filter(VERSION_TAG_REGEX_PATTERN.match, all_tags)
+                        latest_image_tags = list(all_tags)
+                        if latest_image_tags:
+                            latest_image_tag = latest_image_tags[0]
+                            break
+                    else:
+                        print_error("No image with a valid version tag", exit_program=True)
                 print(
                     f"Detected latest version of {args.image_name} as having the "
                     f"tag{'s' if len(latest_image.tags) > 1 else ''} {', '.join(all_tags)}"
                 )
                 try:
                     latest_image_tag = next(
-                        filter(lambda tag: tag not in self.magic_tags, all_tags)
+                        filter(VERSION_TAG_REGEX_PATTERN.match, all_tags)
                     )
                 except StopIteration:
                     print_error(
-                        f"This image has no non-magic tag. Magic tags: {', '.join(self.magic_tags)}",
+                        f"This image has no valid version tag. Existing tags: {', '.join(all_tags)}",
                         exit_program=True,
                     )
                 # Updating tag
