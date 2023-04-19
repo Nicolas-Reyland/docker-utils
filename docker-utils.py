@@ -311,6 +311,7 @@ class DockerCommandBase(ABC):
     @abstractmethod
     def execute(self, client, args: list[str]) -> None:
         """Execute the arguments"""
+        ...
 
 
 @register_command("build")
@@ -457,6 +458,9 @@ class DockerBuild(DockerCommandBase):
             repository=args.image_name,
             tag="latest",
         )
+        if args.push == "local":
+            print("Keeping image locally")
+            return
         if remote_registry := os.environ.get(DOCKER_UTILS_REMOTE_REGISTRY_VAR_NAME):
             remote_registry_image_name = remote_registry + args.image_name
             assert new_image.tag(
